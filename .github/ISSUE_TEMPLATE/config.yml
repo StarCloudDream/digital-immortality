@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 伦理问题想聊聊
+    url: https://github.com/OWNER/digital-immortality/discussions
+    about: 同意、诚实、依赖风险这类没有标准答案的问题，去 Discussions 吵
+  - name: 先看文档
+    url: https://github.com/OWNER/digital-immortality/blob/main/CONTRIBUTING.md
+    about: 参与方式、规矩、最缺人的方向都在里面
