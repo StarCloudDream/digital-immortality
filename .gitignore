@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+
+# 人格档案、断言仓库、学习日志——都是私人遗物，绝不进版本库
+persona.json
+claims.json
+journal.jsonl
+messages.json
+config.yaml
+
+# 适配器作者自己导出的聊天记录
+data/
+private/
+*.db
