@@ -181,7 +181,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Epistemic fidelity (EER) — "I don't know" as a first-class answer
 - [x] Asymmetric permission gradient v1 — pause is one vote, resume leaves a trace
 - [x] Blind-question inquiry engine — the profile asks where it's blurry
-- [ ] Incremental profiling: merge new chat history without overwriting conclusions
+- [x] Incremental profiling: the claim store accumulates across runs, new
+      chat history merges in without overwriting existing conclusions
 - [ ] Episodic memory (RAG): remembering *what happened*, not just *how they talked*
 - [ ] Persona snapshots across the years
 - [ ] Evaluator v2: embedding similarity + LLM-as-judge blind test

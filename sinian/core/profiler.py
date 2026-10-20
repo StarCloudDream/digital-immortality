@@ -420,10 +420,10 @@ def _apply_claims(store, persona: Persona) -> None:
     occupation = store.resolve("life.occupation")
     if occupation:
         persona.life.occupation = occupation
-    interests = store.resolve_all("life.interests", threshold=0.5)
+    interests = store.resolve_all("life.interests", threshold=0.5, soft=True)
     if interests:
         persona.life.interests = interests
-    skills = store.resolve_all("life.skills", threshold=0.5)
+    skills = store.resolve_all("life.skills", threshold=0.5, soft=True)
     if skills:
         persona.life.skills = skills
     # 知识边界：跨批次合并，同一领域取最高置信的等级（"不会"证据最重）
@@ -438,8 +438,11 @@ def _apply_claims(store, persona: Persona) -> None:
         from sinian.core.persona import KnowledgeDomain
         persona.knowledge = [KnowledgeDomain(domain=d, level=lvl)
                              for d, (lvl, _) in merged.items()]
-    # 矛盾保留：同一字段多个值都过了阈值 → 不强行统一，呈现为矛盾面。
-    # 人本来就是矛盾的（"既说做设计又说做运营"可能是转行期、可能看对象说话）
+    # 矛盾保留：单值字段上多个值都过了阈值 → 不强行统一，呈现为矛盾面。
+    # 人本来就是矛盾的（"既说做设计又说做运营"可能是转行期、可能看对象说话）。
+    # 但多值字段（关系/兴趣/擅长）天生就该有多个值——小雨是朋友、我妈是母亲，
+    # 那是两个人，不是人格分裂，别拿去问活人"哪个更真"。
+    multi_value = {"relations", "life.interests", "life.skills"}
     from collections import defaultdict
     by_subject: dict[str, list] = defaultdict(list)
     for c in store.claims:
@@ -448,7 +451,9 @@ def _apply_claims(store, persona: Persona) -> None:
     persona.conflicts = [
         f"{subj}：{' ↔ '.join(sorted({c.value for c in cs}))}"
         for subj, cs in by_subject.items()
-        if len({c.value for c in cs}) > 1 and not subj.startswith("knowledge.")
+        if (len({c.value for c in cs}) > 1
+                and subj not in multi_value
+                and not subj.startswith("knowledge."))
     ]
 
 

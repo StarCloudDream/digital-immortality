@@ -47,4 +47,15 @@ class UnifiedMessage:
     def from_dict(cls, d: dict) -> "UnifiedMessage":
         d = dict(d)
         d["timestamp"] = datetime.fromisoformat(d["timestamp"])
+        # 手改 messages.json 是允许的，但删了键得说清楚少了什么——
+        # 一个光秃秃的 TypeError 能把人逼疯
+        required = {"platform", "conversation_id", "sender_id",
+                    "sender_name", "is_self", "content"}
+        missing = required - d.keys()
+        if missing:
+            raise ValueError(
+                f"这条消息缺字段：{sorted(missing)}。"
+                f"messages.json 可以手改，但别删键——"
+                f"拿不准就先删掉整份文件重新 sinian ingest。"
+            )
         return cls(**d)

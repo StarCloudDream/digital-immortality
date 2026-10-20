@@ -50,7 +50,7 @@ def build_llm(cfg: dict):
 def cmd_ingest(args) -> None:
     adapter = ADAPTERS[args.adapter]()
     msgs = [m.to_dict() for m in adapter.fetch(args.input)]
-    DATA_DIR.mkdir(exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     out = DATA_DIR / "messages.json"
     out.write_text(json.dumps(msgs, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"收录了 {len(msgs)} 条消息 → {out}")

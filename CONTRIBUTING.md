@@ -21,7 +21,7 @@
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev,llm]"
-python tests/test_core.py        # 15 项，必须全过
+python tests/test_core.py        # 全部必须过（现在 21 项，只增不减）
 ```
 
 改了侧写算法或 prompt 组装，**一定要跑一遍 `sinian evaluate`**。

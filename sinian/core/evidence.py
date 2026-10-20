@@ -157,10 +157,24 @@ class ClaimStore:
             return None
         return max(candidates, key=lambda c: c.confidence).value
 
-    def resolve_all(self, subject: str, threshold: float = DEFAULT_THRESHOLD) -> list[str]:
-        """多值字段（如兴趣）：所有过门的值都生效。"""
-        return [c.value for c in self.claims
-                if c.subject == subject and c.ready(threshold)]
+    def resolve_all(self, subject: str, threshold: float = DEFAULT_THRESHOLD,
+                    soft: bool = False) -> list[str]:
+        """多值字段（如兴趣）：所有过门的值都生效。
+
+        soft=True 跳过印象级门控，按调用方给的阈值来——
+        兴趣和擅长本就是"带证据的推断"，不是拍板的事实。
+        误判一个兴趣，代价是数字分身多追了一份新闻；
+        误判一条知识边界，代价是它开始装懂。严格程度理应不对称。
+        """
+        out = []
+        for c in self.claims:
+            if c.subject != subject or c.revoked:
+                continue
+            need = threshold if soft else (
+                IMPRESSION_GATE if c.level == "impression" else threshold)
+            if c.confidence >= need:
+                out.append(c.value)
+        return out
 
     def verbatim_ratio(self) -> float:
         """原话级断言占比——人格质量的核心指标（量化门槛）。"""

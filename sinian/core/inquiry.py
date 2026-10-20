@@ -35,7 +35,9 @@ def suggest_questions(persona: Persona, store: ClaimStore) -> list[dict]:
             "ref": conflict,
         })
 
-    # 断层型：两个值都没到压倒性置信——最可能是"正在转变"
+    # 断层型：两个值都没到压倒性置信——最可能是"正在转变"。
+    # 多值字段（关系/兴趣/擅长）不参与：多个朋友不是人格断层。
+    multi_value = {"relations", "life.interests", "life.skills"}
     by_subject: dict[str, list] = {}
     for c in store.claims:
         if not c.revoked:
@@ -43,7 +45,9 @@ def suggest_questions(persona: Persona, store: ClaimStore) -> list[dict]:
     for subj, claims in by_subject.items():
         values = {c.value for c in claims}
         top = max(c.confidence for c in claims)
-        if len(values) > 1 and 0.6 <= top < 0.9:
+        if (len(values) > 1 and 0.6 <= top < 0.9
+                and subj not in multi_value
+                and not subj.startswith("knowledge.")):
             questions.append({
                 "type": "断层",
                 "question": f"{subj} 上 TA 同时有 {sorted(values)} 两种痕迹，"

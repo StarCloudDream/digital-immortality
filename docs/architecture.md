@@ -12,6 +12,8 @@
 | Simulation | `sinian/core/simulator.py` + `llm.py` | ✅ | Core team |
 | Continuation | `sinian/core/curiosity.py` | ✅ | Core team (sources are plugins) |
 | Quality | `sinian/core/evaluator.py` | ✅ | Core team |
+| Evidence | `sinian/core/evidence.py` | ✅ | Core team |
+| Governance | `sinian/core/versions.py` + `inquiry.py` | ✅ | Core team |
 | Interfaces | (future) bots / memorial pages | ❌ plugin | Community |
 
 The core owns exactly one pipeline: **unified messages → persona file →
@@ -30,6 +32,10 @@ UnifiedMessage stream
 ContextWindow[]  (own message ± N context, never across conversations)
    │  StatisticalProfiler + LifeProfiler (free) → LLMProfiler (optional)
    ▼
+ClaimStore — every conclusion is a claim with confidence, provenance,
+   timestamps; evidence accumulates across runs, competitors contend,
+   sub-threshold stays *unknown*  (incremental profiling falls out of this)
+   ▼
 Persona (identity / style / life / relations / knowledge / custom layers)
    │  identity_overrides applied · style_directives steered the learning
    ▼
@@ -40,6 +46,13 @@ LLMProvider (Ollama local / OpenAI-compatible cloud)
    ▼
 The person, talking — with a Curiosity Engine keeping them up to date
 ```
+
+Around this spine, the governance layer wraps two safety rails:
+`PersonaVault` fingerprints every snapshot (tampered archives refuse to
+roll back), and the asymmetric permission gradient lets anyone pause the
+persona with one vote while resuming leaves a trace. `inquiry.py` closes
+the loop in the other direction — when the profile is blurry, it asks the
+living instead of guessing.
 
 ## Key design decisions
 
@@ -59,13 +72,18 @@ The person, talking — with a Curiosity Engine keeping them up to date
    "unknown is a valid answer" are written into every system prompt.
 7. **The evaluator is the regression gate**: every change to profiling or
    prompt assembly must keep the "does it sound like them" score up.
+8. **Every attribute is a claim, not a fact**: conclusions carry
+   confidence, provenance and timestamps. Competing claims contend
+   instead of being silently overwritten; below-threshold stays
+   *unknown* — the profile grows like a person does, gradually.
 
 ## Open tasks for the community (by priority)
 
 1. Episodic memory (RAG): remember *what happened*, not just *how they talked*
 2. Curiosity source plugins: RSS / news APIs / scheduled fetching
    (interface defined in `curiosity.py`)
-3. Incremental profiling + persona snapshots across years
+3. Persona snapshots across years (incremental profiling itself is done
+   via the claim store — cross-run accumulation)
 4. Evaluator v2: embedding similarity + LLM-as-judge blind test
 5. Adapters for messaging apps worldwide + interface plugins
    (memorial page, chat bots, voice)

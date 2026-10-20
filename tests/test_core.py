@@ -101,6 +101,7 @@ def test_life_profiler_relations_and_knowledge():
         make_msg("我很擅长排版", True, 2),
         make_msg("我是真的不懂炒股", True, 3),
         make_msg("这次发布会我全程追的，芯片太猛了", True, 4),
+        make_msg("我学姐想学剪辑，我教了她两招", True, 5),
     ]
     # 高频联系人
     for i in range(4):
@@ -108,6 +109,7 @@ def test_life_profiler_relations_and_knowledge():
     life, relations, knowledge = LifeProfiler().profile(msgs, "薄荷")
     rel_map = {r.name: r.relation for r in relations}
     assert rel_map.get("我妈") == "母亲"
+    assert rel_map.get("学姐") == "同学"            # 校园关系也得认
     assert rel_map.get("朋友") == "朋友（高频联系人）"
     know_map = {k.domain: k.level for k in knowledge}
     assert know_map.get("炒股") == "不会"          # 本人说了不懂，就是不会
@@ -241,6 +243,36 @@ def test_conflicts_preserved_not_unified():
         assert any("设计" in c and "运营" in c for c in p.conflicts)
         prompt = build_system_prompt(p)
         assert "矛盾面" in prompt
+
+
+def test_multi_value_fields_are_not_conflicts():
+    """关系/兴趣/擅长天生多值——小雨是朋友、我妈是母亲，是两个人，不是矛盾。
+
+    这个 bug 真实存在过：矛盾检测按 subject 分组，多值字段全被报成
+    "两个说法都站得住"，盲盒提问追着问"哪个更真"，活人被问懵。
+    """
+    import tempfile
+    from sinian.core.evidence import ClaimStore
+    with tempfile.TemporaryDirectory() as td:
+        store = ClaimStore(Path(td) / "claims.json")
+        for _ in range(3):
+            store.add("relations", "小雨=朋友", "kinship", "小雨喊我开黑")
+            store.add("relations", "我妈=母亲", "kinship", "我妈又催我吃饭")
+        # 兴趣加四次：统计印象创建 0.3、每次重复只算 0.15
+        # （0.3→0.405→0.494→0.570 才过 0.5）——提过一次的玩意儿不算兴趣，
+        # 这是 EWPA 的严谨，不是 bug
+        for _ in range(4):
+            store.add("life.interests", "科技数码", "statistical")
+            store.add("life.interests", "烹饪", "statistical")
+        windows = extract_windows(sample_messages())
+        p = build_persona("薄荷", windows, claim_store=store)
+        # 单值字段的真矛盾照报，多值字段的一片和谐
+        assert not any("relations" in c or "interests" in c for c in p.conflicts)
+        assert p.life.interests and "科技数码" in p.life.interests
+        assert "烹饪" in p.life.interests
+        from sinian.core.inquiry import suggest_questions
+        qs = suggest_questions(p, store)
+        assert not any("小雨" in q["question"] for q in qs)
 
 
 def test_evidence_dedup_and_gate_and_retract():
