@@ -32,7 +32,7 @@ SOURCE_WEIGHTS = {
 
 DEFAULT_THRESHOLD = 0.6
 
-#: 证据等级（三级制，但做了自己的改动）：
+#: 证据等级（三级制，做了自己的改动）：
 #: verbatim 本人原话 > artifact 文档材料 > impression 印象与统计推断
 LEVEL_MULTIPLIER = {"verbatim": 1.0, "artifact": 0.8, "impression": 0.5}
 
@@ -44,7 +44,7 @@ SOURCE_LEVEL = {
 }
 
 #: 印象级断言要进入生效人格，得拿出压倒性的置信度（0.9）。
-#:  eligible() 门控：不是所有高分都能上路
+#: 资格门控：不是所有高分都能上路
 IMPRESSION_GATE = 0.9
 
 
@@ -61,7 +61,7 @@ class Claim:
     first_seen: str = ""
     last_seen: str = ""
     #: 已计入的证据指纹。同一条证据反复出现不该把置信度刷上天——
-    #:  canonical_id 去重计权
+    #: 证据去重计权
     counted: list[str] = field(default_factory=list)
     #: 被撤回。本人说"这条不算数"，断言保留在仓库里但不再生效
     revoked: bool = False
@@ -139,7 +139,7 @@ class ClaimStore:
     def retract(self, subject: str, value: str) -> bool:
         """撤回一条断言。断言留在仓库里（保留历史），但不再生效。
 
-        本人说"这条不算数"就该真不算数——某开源项目 那种
+        本人说"这条不算数"就该真不算数——
         "提交后不可撤回"的设计是我们明确要避免的反面。
         """
         hit = False
@@ -177,7 +177,7 @@ class ClaimStore:
         return out
 
     def verbatim_ratio(self) -> float:
-        """原话级断言占比——人格质量的核心指标（量化门槛）。"""
+        """原话级断言占比——人格质量的核心指标。"""
         active = [c for c in self.claims if not c.revoked]
         if not active:
             return 0.0

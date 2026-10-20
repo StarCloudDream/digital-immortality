@@ -189,7 +189,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [ ] Curiosity source plugins (RSS / news APIs)
 - [ ] Community adapters & interfaces (memorial page, chat bots)
 - [ ] Research: memory consolidation hierarchies, associative thinking, meta-awareness
-      (see [docs/related-work.md](docs/related-work.md))
 
 ## Contributing
 

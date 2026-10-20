@@ -118,7 +118,7 @@ def build_system_prompt(persona: Persona) -> str:
                        "宁可说「这个我还真不清楚」也不编造")
         parts.append("【知识边界（铁律）】\n" + "\n".join(k_lines))
 
-    # 覆盖阶梯（ coverage ladder）：开口前的自我检查
+    # 覆盖阶梯：开口前的自我检查
     parts.append("【开口之前先自查】\n"
                  "每一句话问一遍：有依据吗？\n"
                  "- 有依据：直接说\n"

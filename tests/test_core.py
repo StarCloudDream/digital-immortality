@@ -313,7 +313,7 @@ def test_multi_value_fields_are_not_conflicts():
 
 
 def test_evidence_dedup_and_gate_and_retract():
-    """
+    """证据去重、印象级门控、断言可撤回。"""
     import tempfile
     from sinian.core.evidence import ClaimStore
 
@@ -341,7 +341,7 @@ def test_evidence_dedup_and_gate_and_retract():
 
 
 def test_rollback_fingerprint_tamper():
-    """ 的 payload_sha256：存档被改动就拒绝回滚。"""
+    """payload_sha256：存档被改动就拒绝回滚。"""
     import tempfile
     from sinian.core.versions import PersonaVault
     with tempfile.TemporaryDirectory() as td:
@@ -361,7 +361,7 @@ def test_rollback_fingerprint_tamper():
 
 
 def test_hedge_stacking_and_quality_grade():
-    """ 的禁止叠甲 + 某开源项目 的质量门槛。"""
+    """禁止叠甲 + 质量门槛。"""
     from sinian.core.evaluator import score_reply, hedge_stacking, quality_report
     p = build_persona("薄荷", extract_windows(sample_messages()))
     assert hedge_stacking("大概可能应该好像是这样吧")
@@ -379,7 +379,7 @@ def test_hedge_stacking_and_quality_grade():
 
 
 def test_inquiry_blind_questions():
-    """ 的盲盒提问五型：档案哪里糊，就反问什么。"""
+    """盲盒提问五型：档案哪里糊，就反问什么。"""
     from sinian.core.inquiry import suggest_questions, format_questions
     import tempfile
     from sinian.core.evidence import ClaimStore
@@ -401,7 +401,7 @@ def test_inquiry_blind_questions():
 
 
 def test_pause_is_a_one_vote_right():
-    """ 非对称权限：任一方暂停即闭口，恢复才要流程。"""
+    """非对称权限：任一方暂停即闭口，恢复才要流程。"""
     from sinian.core.simulator import PersonaSimulator
     p = Persona(name="薄荷")
     p.paused = True
@@ -430,7 +430,7 @@ def test_pause_is_a_one_vote_right():
 
 
 def test_llm_profiler_fold_batches():
-    """ 的折叠式累积生成：分批带着草稿更新，上下文有界。"""
+    """折叠式累积生成：分批带着草稿更新，上下文有界。"""
     import tempfile
     from sinian.core.profiler import LLMProfiler
 

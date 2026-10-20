@@ -37,7 +37,7 @@ class JournalEntry:
     #: 同件事不同年代的说法分存，不以新盖旧）
     written_at: str = ""
     #: 听众隔离：这条记忆属于跟谁聊出来的。TA 不会对别人说
-    #: 你单独告诉 TA 的事（记忆隔离原则）
+    #: 你单独告诉 TA 的事（记忆按听众隔离：不对别人提起）
     scope: str | None = None
 
 

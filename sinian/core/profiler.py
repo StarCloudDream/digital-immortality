@@ -287,7 +287,7 @@ class LLMProfiler:
     def profile(self, windows: list[ContextWindow]) -> dict:
         """返回可直接 merge 进 Persona 的 dict；LLM 输出解析失败时返回空 dict。
 
-        折叠式生成：窗口多的时候分批 left-fold——
+        窗口多的时候分批 left-fold——
         每批带着当前草稿更新，而不是把所有窗口灌进一次调用。
         上下文不炸，早年和近期的自己也都被照顾到。
         """

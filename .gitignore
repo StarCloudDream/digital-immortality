@@ -20,3 +20,7 @@ data/
 private/
 *.db
 _research/
+
+# 内部调研文档：盘点/对比外部项目的笔记，仅本地留存，不对外发布
+docs/landscape.md
+docs/related-work.md

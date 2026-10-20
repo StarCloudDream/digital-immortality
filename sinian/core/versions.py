@@ -4,7 +4,7 @@
 但每次更新都可能改砸（新数据质量差、意向写错了、算法退步了），
 所以：每次覆盖前自动存档旧版，随时列出、随时回滚。
 
-某开源项目 用实践验证过这个机制的价值，思念把它做成核心能力。
+版本管理是人格学习的必备能力：每一次覆盖前都自动存档，随时能回滚。
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 def payload_sha256(path: str | Path) -> str:
-    """档案指纹。 payload_sha256：
+    """档案指纹（payload_sha256 防篡改）：
     改一个字指纹就变，谁动过人格一目了然。
     """
     raw = Path(path).read_bytes()
