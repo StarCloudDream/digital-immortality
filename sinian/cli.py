@@ -100,6 +100,11 @@ def cmd_profile(args) -> None:
 def cmd_chat(args) -> None:
     persona = Persona.load(DATA_DIR / "persona.json")
     print(f"人格档案已加载：{persona.name}")
+    if persona.paused:
+        print(f"（这个档案处于暂停状态，{persona.paused_by or '有人'} 于 "
+              f"{persona.paused_at or '早些时候'} 按了暂停。"
+              f"恢复要走 sinian resume，想聊先恢复）")
+        return
     llm = build_llm(load_config())
     if llm is None:
         print("(没配 LLM，先把 prompt 打出来看看像不像。"
@@ -199,6 +204,33 @@ def cmd_retract(args) -> None:
           "（断言保留在仓库里，但不再进入人格）")
 
 
+def cmd_ask(args) -> None:
+    """盲盒提问：档案哪里是糊的，反问最了解 TA 的人。"""
+    from sinian.core.inquiry import suggest_questions, format_questions
+    from sinian.core.evidence import ClaimStore
+    persona = Persona.load(DATA_DIR / "persona.json")
+    questions = suggest_questions(persona, ClaimStore(DATA_DIR / "claims.json"))
+    print(format_questions(questions))
+
+
+def cmd_pause(args) -> None:
+    persona = Persona.load(DATA_DIR / "persona.json")
+    persona.paused = True
+    persona.paused_by = args.by
+    persona.paused_at = __import__("datetime").date.today().isoformat()
+    persona.save(DATA_DIR / "persona.json")
+    print(f"已暂停（{args.by}）。任一方都能暂停，恢复要走治理流程——停止容易，启动难")
+
+
+def cmd_resume(args) -> None:
+    persona = Persona.load(DATA_DIR / "persona.json")
+    persona.paused = False
+    persona.paused_by = None
+    persona.paused_at = None
+    persona.save(DATA_DIR / "persona.json")
+    print("已恢复。谁恢复的、为什么，请记在 issue 或留言里——恢复比暂停难，得留痕")
+
+
 def cmd_claims(args) -> None:
     from sinian.core.evidence import ClaimStore
     store = ClaimStore(DATA_DIR / "claims.json")
@@ -256,6 +288,16 @@ def main() -> None:
 
     p = sub.add_parser("quality", help="人格档案质量评级 A/B/C/D")
     p.set_defaults(fn=cmd_quality)
+
+    p = sub.add_parser("ask", help="盲盒提问：档案哪里是糊的，问活人")
+    p.set_defaults(fn=cmd_ask)
+
+    p = sub.add_parser("pause", help="暂停数字人格（任一方的一票权）")
+    p.add_argument("--by", default="未署名", help="谁暂停的（审计用）")
+    p.set_defaults(fn=cmd_pause)
+
+    p = sub.add_parser("resume", help="恢复数字人格（要走流程，留痕）")
+    p.set_defaults(fn=cmd_resume)
 
     p = sub.add_parser("retract", help="撤回一条断言（本人说不算数就不算数）")
     p.add_argument("subject", help="字段路径，如 life.occupation")

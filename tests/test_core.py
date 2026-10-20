@@ -309,6 +309,82 @@ def test_hedge_stacking_and_quality_grade():
     assert quality_report(full)["grade"] in ("A", "B", "C")
 
 
+def test_inquiry_blind_questions():
+    """ 的盲盒提问五型：档案哪里糊，就反问什么。"""
+    from sinian.core.inquiry import suggest_questions, format_questions
+    import tempfile
+    from sinian.core.evidence import ClaimStore
+    with tempfile.TemporaryDirectory() as td:
+        store = ClaimStore(Path(td) / "claims.json")
+        store.add("life.interests", "科技数码", "statistical")  # 只有印象级 → 线头
+        store.add("life.occupation", "设计", "self_statement")
+        store.add("life.occupation", "运营", "self_statement")   # 断层型素材
+        p = Persona(name="薄荷")
+        p.style.catchphrases = ["笑死"]
+        p.life.interests = ["科技数码"]
+        p.conflicts = ["life.occupation：设计 ↔ 运营"]
+        qs = suggest_questions(p, store)
+        types = {q["type"] for q in qs}
+        assert "矛盾" in types and "线头" in types and "模式" in types
+        assert "断层" in types  # 两个都没到 0.9
+        text = format_questions(qs)
+        assert "sinian correct" in text  # 答案有入口
+
+
+def test_pause_is_a_one_vote_right():
+    """ 非对称权限：任一方暂停即闭口，恢复才要流程。"""
+    from sinian.core.simulator import PersonaSimulator
+    p = Persona(name="薄荷")
+    p.paused = True
+    p.paused_by = "家属"
+    # 暂停的人格不调 LLM 也不开口
+    class ExplodingLLM:
+        def chat(self, system, messages):
+            raise AssertionError("暂停了不该调 LLM")
+    sim = PersonaSimulator(p, ExplodingLLM())
+    out = sim.reply("在吗")
+    assert "暂停" in out
+    # 恢复即开
+    p.paused = False
+    sim2 = PersonaSimulator(p, type("L", (), {
+        "chat": lambda self, s, m: "在的"})())
+    assert sim2.reply("在吗") == "在的"
+    # 暂停状态必须能落盘再读回来——不然暂停了个寂寞
+    import tempfile
+    from pathlib import Path
+    p.paused, p.paused_by = True, "阿茶"
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "p.json"
+        p.save(f)
+        back = Persona.load(f)
+    assert back.paused and back.paused_by == "阿茶"
+
+
+def test_llm_profiler_fold_batches():
+    """ 的折叠式累积生成：分批带着草稿更新，上下文有界。"""
+    import tempfile
+    from sinian.core.profiler import LLMProfiler
+
+    calls = {"n": 0}
+
+    class CountingLLM:
+        def chat(self, system, messages):
+            calls["n"] += 1
+            return '{"narrative": "第%d批之后的速写"}' % calls["n"]
+
+    # 40 条本人发言 → 40 个窗口；每批 10 → 恰好 4 次调用
+    big = []
+    for i in range(40):
+        big.append(make_msg(f"朋友说点事{i}", False, i * 2))
+        big.append(make_msg(f"哈哈，第{i}句吐槽", True, i * 2 + 1))
+    windows = extract_windows(big, window=10)
+    assert len(windows) == 40
+    prof = LLMProfiler(CountingLLM(), max_windows=40, batch=10)
+    result = prof.profile(windows)
+    assert calls["n"] == 4
+    assert "速写" in result.get("narrative", "")
+
+
 def test_epistemic_fidelity():
     """EER 认知错误率：本人明说过不会的领域，自信作答是重罪，认怂则豁免。"""
     from sinian.core.evaluator import score_reply, epistemic_violations

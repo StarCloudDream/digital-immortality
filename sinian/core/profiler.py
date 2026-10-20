@@ -13,8 +13,9 @@
 """
 from __future__ import annotations
 
+import json
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date
 from typing import Iterable
@@ -236,11 +237,31 @@ class LLMProfiler:
 聊天片段：
 {windows_text}"""
 
+    #: 折叠式提炼的第二段提示词：带着草稿读新一批，而不是每次从头灌
+    PROMPT_TEMPLATE_FOLD = """你已经在为"本人"积累一份人格速写草稿。现在读入新的一批聊天片段，
+把草稿更新得更准确。只输出完整的 JSON（格式同下，字段可以改）：
+{{
+  "gender": "...", "age_range": "...", "self_title": "...",
+  "humor_score": 0.0-1.0,
+  "tone_keywords": ["...", "最多5个"],
+  "narrative": "100-200字性格速写，中文口语化"
+}}
+
+【当前草稿】
+{draft}
+
+【新的一批聊天片段】
+{windows_text}
+
+{directives_block}
+输出更新后的完整 JSON："""
+
     def __init__(self, llm, directives: list[str] | None = None,
-                 max_windows: int = 40):
+                 max_windows: int = 40, batch: int = 10):
         self.llm = llm  # sinian.core.llm.LLMProvider
         self.directives = directives or []
         self.max_windows = max_windows
+        self.batch = batch
 
     def _directives_block(self) -> str:
         if not self.directives:
@@ -264,18 +285,44 @@ class LLMProfiler:
         return [windows[int(i * step)] for i in range(self.max_windows)]
 
     def profile(self, windows: list[ContextWindow]) -> dict:
-        """返回可直接 merge 进 Persona 的 dict；LLM 输出解析失败时返回空 dict。"""
+        """返回可直接 merge 进 Persona 的 dict；LLM 输出解析失败时返回空 dict。
+
+        折叠式生成：窗口多的时候分批 left-fold——
+        每批带着当前草稿更新，而不是把所有窗口灌进一次调用。
+        上下文不炸，早年和近期的自己也都被照顾到。
+        """
         if not windows:
             return {}
         sampled = self._sample(windows)
-        prompt = self.PROMPT_TEMPLATE.format(
+        if len(sampled) <= self.batch:
+            raw = self.llm.chat("你是一位细腻的人格侧写师。",
+                                [{"role": "user", "content":
+                                  self._single_prompt(sampled)}])
+            return self._parse_json(raw)
+
+        # 折叠：草稿越走越厚，但每批上下文有界
+        draft: dict = {}
+        for i in range(0, len(sampled), self.batch):
+            batch = sampled[i:i + self.batch]
+            prompt = self.PROMPT_TEMPLATE_FOLD.format(
+                draft=json.dumps(draft, ensure_ascii=False) if draft else "（还没有，这是第一批）",
+                windows_text="\n\n---\n\n".join(self._format_window(w) for w in batch),
+                directives_block=self._directives_block(),
+            )
+            raw = self.llm.chat("你是一位细腻的人格侧写师。",
+                                [{"role": "user", "content": prompt}])
+            parsed = self._parse_json(raw)
+            if parsed:
+                draft = parsed  # 新草稿覆盖旧草稿（LLM 输出是全量快照）
+            # 解析失败的批次跳过——宁可少一批，不能拿半成品覆盖
+        return draft
+
+    def _single_prompt(self, sampled: list[ContextWindow]) -> str:
+        return self.PROMPT_TEMPLATE.format(
             count=len(sampled),
             directives_block=self._directives_block(),
             windows_text="\n\n---\n\n".join(self._format_window(w) for w in sampled),
         )
-        raw = self.llm.chat("你是一位细腻的人格侧写师。",
-                            [{"role": "user", "content": prompt}])
-        return self._parse_json(raw)
 
     @staticmethod
     def _parse_json(raw: str) -> dict:

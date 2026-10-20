@@ -127,6 +127,9 @@ sinian profile --self "你的名字" --window 10 --age 25 \
 sinian learn --input news.json   # 好奇心引擎：继续追随你的兴趣
 sinian chat                      # 以 TA 的方式对话（先配置 ~/.sinian/config.yaml）
 sinian evaluate --input replies.txt   # "像不像 TA"回归测试
+sinian ask                        # 盲盒提问：档案哪里是糊的，问活人
+sinian pause --by "谁"            # 任一方都能暂停；恢复要走流程，留痕
+sinian resume
 ```
 
 用本地模型（Ollama）可以完全离线运行——纪念之物就该放在自己手里。
@@ -157,6 +160,9 @@ sinian evaluate --input replies.txt   # "像不像 TA"回归测试
 - [x] **EWPA 证据加权人格属性**：每个属性都是带置信度、出处、时间戳的断言；
       证据跨月累积、矛盾断言竞争、低于阈值保持"未知"（增量侧写由此自然成立）
 - [x] 风格一致性评估器 v1
+- [x] 认知保真度（EER）——"我不知道"是一等答案
+- [x] 非对称权限梯度 v1——暂停是一票权，恢复留痕
+- [x] 盲盒提问引擎——档案自己问活人：哪里糊了
 - [ ] 增量侧写：新聊天记录 merge 进档案，不覆盖已有结论
 - [ ] 事实性记忆（RAG）：记得*发生过什么*，而不只是*怎么说话*
 - [ ] 跨年份人格快照

@@ -137,6 +137,13 @@ class Persona:
     #: 不强行统一，两边都呈现给模拟器，让 TA 自己选择在什么情境是哪一面。
     conflicts: list[str] = field(default_factory=list)
 
+    #: 暂停开关。非对称权限梯度：任一方都可以一票暂停，
+    #: 但恢复要更多方同意——"停止容易，启动难"
+    paused: bool = False
+    #: 谁暂停的、什么时候（审计用）
+    paused_by: str | None = None
+    paused_at: str | None = None
+
     def apply_overrides(self) -> None:
         """身份设定压到身份层上。风格层不动——风格走意向引导，不走覆盖。"""
         for key, value in self.identity_overrides.items():
@@ -195,6 +202,9 @@ class Persona:
             style_directives=d.get("style_directives", []),
             corrections=d.get("corrections", []),
             conflicts=d.get("conflicts", []),
+            paused=d.get("paused", False),
+            paused_by=d.get("paused_by"),
+            paused_at=d.get("paused_at"),
         )
         p.apply_overrides()
         return p

@@ -118,6 +118,14 @@ def build_system_prompt(persona: Persona) -> str:
                        "宁可说「这个我还真不清楚」也不编造")
         parts.append("【知识边界（铁律）】\n" + "\n".join(k_lines))
 
+    # 覆盖阶梯（ coverage ladder）：开口前的自我检查
+    parts.append("【开口之前先自查】\n"
+                 "每一句话问一遍：有依据吗？\n"
+                 "- 有依据：直接说\n"
+                 "- 没依据：明说「这块我没有依据」，别把猜测包成事实\n"
+                 "- 绝不许叠甲：一句里堆三个以上「大概/可能/应该」，"
+                 "等于把没依据的话伪装成有依据，比直接编造更糟")
+
     if s.sample_messages:
         samples = "\n".join(f"「{m}」" for m in s.sample_messages[:10])
         parts.append(f"【TA 真实说过的话，模仿这种语感】\n{samples}")
@@ -148,6 +156,10 @@ class PersonaSimulator:
                           if journal_path else None)
 
     def reply(self, user_input: str, speaker: str = "对方") -> str:
+        if self.persona.paused:
+            # 权限梯度：任一方暂停，TA 就不开口。恢复要流程，不在这里
+            return ("（这个数字人格已被暂停。暂停是任一方都能行使的一票权，"
+                    "恢复需要走治理流程——停止容易，启动难。）")
         messages = list(self.history)
         # 自学记忆检索：对方聊的话题，TA 最近关注过的话就有得聊。
         # 带听众隔离——你单独告诉 TA 的事，TA 不会对别人提起

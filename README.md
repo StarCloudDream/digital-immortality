@@ -139,6 +139,9 @@ sinian profile --self "YourName" --window 10 --age 25 \
 sinian learn --input news.json   # curiosity engine: keep up with your interests
 sinian chat                      # talk as them (configure ~/.sinian/config.yaml first)
 sinian evaluate --input replies.txt   # "does it sound like them?" regression test
+sinian ask                        # blind questions: where the profile is blurry, ask the living
+sinian pause --by "name"          # anyone can stop it; resume needs a trace
+sinian resume
 ```
 
 Runs fully offline with a local model (Ollama) — a remembrance should live
@@ -175,6 +178,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
       months, competing claims contend, sub-threshold stays *unknown*
       (incremental profiling falls out of this for free)
 - [x] Style-consistency evaluator v1
+- [x] Epistemic fidelity (EER) — "I don't know" as a first-class answer
+- [x] Asymmetric permission gradient v1 — pause is one vote, resume leaves a trace
+- [x] Blind-question inquiry engine — the profile asks where it's blurry
 - [ ] Incremental profiling: merge new chat history without overwriting conclusions
 - [ ] Episodic memory (RAG): remembering *what happened*, not just *how they talked*
 - [ ] Persona snapshots across the years
