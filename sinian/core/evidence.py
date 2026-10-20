@@ -32,6 +32,21 @@ SOURCE_WEIGHTS = {
 
 DEFAULT_THRESHOLD = 0.6
 
+#: 证据等级（三级制，但做了自己的改动）：
+#: verbatim 本人原话 > artifact 文档材料 > impression 印象与统计推断
+LEVEL_MULTIPLIER = {"verbatim": 1.0, "artifact": 0.8, "impression": 0.5}
+
+#: 来源默认对应的证据等级——本人亲口说的算原话，统计推断只能算印象
+SOURCE_LEVEL = {
+    "override": "verbatim", "correction": "verbatim", "kinship": "verbatim",
+    "self_statement": "verbatim", "llm_inference": "impression",
+    "statistical": "impression",
+}
+
+#: 印象级断言要进入生效人格，得拿出压倒性的置信度（0.9）。
+#:  eligible() 门控：不是所有高分都能上路
+IMPRESSION_GATE = 0.9
+
 
 @dataclass
 class Claim:
@@ -41,16 +56,44 @@ class Claim:
     value: str
     confidence: float
     source: str
+    level: str = "verbatim"          # verbatim / artifact / impression
     evidence: list[str] = field(default_factory=list)
     first_seen: str = ""
     last_seen: str = ""
+    #: 已计入的证据指纹。同一条证据反复出现不该把置信度刷上天——
+    #:  canonical_id 去重计权
+    counted: list[str] = field(default_factory=list)
+    #: 被撤回。本人说"这条不算数"，断言保留在仓库里但不再生效
+    revoked: bool = False
 
-    def reinforce(self, weight: float, evidence: str = "") -> None:
-        """新证据加持：单调上升，边际递减。"""
-        self.confidence = 1 - (1 - self.confidence) * (1 - weight)
-        if evidence and evidence not in self.evidence and len(self.evidence) < 5:
+    def reinforce(self, weight: float, evidence: str = "") -> bool:
+        """新证据加持：单调上升，边际递减。同一条证据只算一次。
+
+        返回是否真的加持了（重复证据返回 False）。
+        """
+        if evidence:
+            fp = "".join(ch for ch in evidence if not ch.isspace())
+            if fp in self.counted:
+                return False
+            if len(self.counted) < 30:
+                self.counted.append(fp)
+        effective = weight * LEVEL_MULTIPLIER.get(self.level, 0.5)
+        self.confidence = 1 - (1 - self.confidence) * (1 - effective)
+        if evidence and len(self.evidence) < 5:
             self.evidence.append(evidence)
         self.last_seen = date.today().isoformat()
+        return True
+
+    def ready(self, threshold: float = DEFAULT_THRESHOLD) -> bool:
+        """资格门控：撤回的不算；印象级断言要压倒性置信度才生效。
+
+        这条是 EWPA 的"硬闸门"——不是所有高分断言都能进入人格，
+        印象级的猜测必须强到离谱才配被称为事实。
+        """
+        if self.revoked:
+            return False
+        need = IMPRESSION_GATE if self.level == "impression" else threshold
+        return self.confidence >= need
 
 
 class ClaimStore:
@@ -63,35 +106,68 @@ class ClaimStore:
             self.claims = [Claim(**c) for c in
                            json.loads(self.path.read_text(encoding="utf-8"))]
 
-    def add(self, subject: str, value: str, source: str, evidence: str = "") -> Claim:
-        """记入一条证据。同值断言增强，异值断言并存竞争。"""
+    def add(self, subject: str, value: str, source: str, evidence: str = "",
+            level: str | None = None) -> Claim:
+        """记入一条证据。同值断言增强，异值断言并存竞争。
+
+        level 可显式指定证据等级（verbatim/artifact/impression），
+        不指定就按来源默认——统计推断自动降为 impression，
+        所以纯猜测很难混进生效人格。
+        """
         weight = SOURCE_WEIGHTS.get(source, SOURCE_WEIGHTS["statistical"])
+        lvl = level or SOURCE_LEVEL.get(source, "verbatim")
         value = value.strip()
         for c in self.claims:
             if c.subject == subject and c.value == value:
+                # 等级往上抬：原话级证据能把印象级断言扶正
+                if lvl == "verbatim" or (lvl == "artifact" and c.level == "impression"):
+                    c.level = lvl
                 c.reinforce(weight, evidence)
                 return c
+        fp = "".join(ch for ch in evidence if not ch.isspace()) if evidence else ""
         claim = Claim(
             subject=subject, value=value, confidence=weight, source=source,
+            level=lvl,
             evidence=[evidence] if evidence else [],
+            counted=[fp] if fp else [],
             first_seen=date.today().isoformat(),
             last_seen=date.today().isoformat(),
         )
         self.claims.append(claim)
         return claim
 
+    def retract(self, subject: str, value: str) -> bool:
+        """撤回一条断言。断言留在仓库里（保留历史），但不再生效。
+
+        本人说"这条不算数"就该真不算数——某开源项目 那种
+        "提交后不可撤回"的设计是我们明确要避免的反面。
+        """
+        hit = False
+        for c in self.claims:
+            if c.subject == subject and c.value == value:
+                c.revoked = True
+                hit = True
+        return hit
+
     def resolve(self, subject: str, threshold: float = DEFAULT_THRESHOLD) -> str | None:
-        """裁决某个字段的生效值：最高置信度过阈值才生效，否则未知。"""
-        candidates = [c for c in self.claims if c.subject == subject]
+        """裁决某个字段的生效值：过资格门且最高置信者胜出，否则未知。"""
+        candidates = [c for c in self.claims
+                      if c.subject == subject and c.ready(threshold)]
         if not candidates:
             return None
-        best = max(candidates, key=lambda c: c.confidence)
-        return best.value if best.confidence >= threshold else None
+        return max(candidates, key=lambda c: c.confidence).value
 
     def resolve_all(self, subject: str, threshold: float = DEFAULT_THRESHOLD) -> list[str]:
-        """多值字段（如兴趣）：所有过阈值的值都生效。"""
+        """多值字段（如兴趣）：所有过门的值都生效。"""
         return [c.value for c in self.claims
-                if c.subject == subject and c.confidence >= threshold]
+                if c.subject == subject and c.ready(threshold)]
+
+    def verbatim_ratio(self) -> float:
+        """原话级断言占比——人格质量的核心指标（量化门槛）。"""
+        active = [c for c in self.claims if not c.revoked]
+        if not active:
+            return 0.0
+        return sum(1 for c in active if c.level == "verbatim") / len(active)
 
     def table(self) -> list[Claim]:
         """按置信度排序的全量断言表——给人看的证据全貌。"""

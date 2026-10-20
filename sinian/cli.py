@@ -174,6 +174,31 @@ def cmd_rollback(args) -> None:
     print(f"已回滚到 {args.version}（回滚前的版本也已存档，随时可以回来）")
 
 
+def cmd_quality(args) -> None:
+    persona = Persona.load(DATA_DIR / "persona.json")
+    from sinian.core.evaluator import quality_report
+    from sinian.core.evidence import ClaimStore
+    rep = quality_report(persona, ClaimStore(DATA_DIR / "claims.json"))
+    print(f"人格档案评级：{rep['grade']}"
+          f"（原话级证据占比 {rep['verbatim_ratio']:.0%}）")
+    for k, ok in rep["checks"].items():
+        print(f"  {'✓' if ok else '✗'} {k}")
+    if rep["missing"]:
+        print(f"\n还差这些才能上场：{'、'.join(rep['missing'])}")
+
+
+def cmd_retract(args) -> None:
+    """撤回一条断言：本人说不算数，就真不算数。"""
+    from sinian.core.evidence import ClaimStore
+    store = ClaimStore(DATA_DIR / "claims.json")
+    if not store.retract(args.subject, args.value):
+        print(f"没找到这条断言：{args.subject} = {args.value}")
+        return
+    store.save()
+    print(f"已撤回：{args.subject} = {args.value}"
+          "（断言保留在仓库里，但不再进入人格）")
+
+
 def cmd_claims(args) -> None:
     from sinian.core.evidence import ClaimStore
     store = ClaimStore(DATA_DIR / "claims.json")
@@ -228,6 +253,14 @@ def main() -> None:
 
     p = sub.add_parser("claims", help="查看证据断言表（人格的置信度全貌）")
     p.set_defaults(fn=cmd_claims)
+
+    p = sub.add_parser("quality", help="人格档案质量评级 A/B/C/D")
+    p.set_defaults(fn=cmd_quality)
+
+    p = sub.add_parser("retract", help="撤回一条断言（本人说不算数就不算数）")
+    p.add_argument("subject", help="字段路径，如 life.occupation")
+    p.add_argument("value", help="要撤回的值")
+    p.set_defaults(fn=cmd_retract)
 
     args = ap.parse_args()
     args.fn(args)

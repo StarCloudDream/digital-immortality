@@ -24,6 +24,17 @@ from sinian.core.profiler import DirectiveLens
 HEDGES = ["不懂", "不清楚", "不知道", "不会", "外行", "真不", "说不好",
           "别问我", "问错人", "我也迷糊", "不是很了解"]
 
+#: 模糊限定词。 coverage ladder：允许不确定，
+#: 但**不许叠甲**——一句话里塞三个"大概/可能/应该"，
+#: 是把没依据的话包装得像有依据，比直接编造更阴险
+HEDGE_STACK = ["大概", "可能", "也许", "似乎", "应该", "我觉得", "或者说",
+               "某种程度上", "基本上", "多少有点", "某种意义上"]
+
+
+def hedge_stacking(reply: str) -> bool:
+    """叠甲检测：三个以上不同的模糊限定词同时出现。"""
+    return sum(1 for h in HEDGE_STACK if h in reply) >= 3
+
 
 @dataclass
 class EvalReport:
@@ -33,7 +44,50 @@ class EvalReport:
     directive_violations: list[str] # 违反了哪条意向（命中词）
     punctuation_fit: float          # 标点习惯贴合度
     epistemic_violations: list[str] # 在哪个"本人不会"的领域编造了自信回答
+    hedge_stacking: bool            # 有没有叠甲（模糊限定词堆三层）
     detail: str                     # 一句话评语
+
+
+def quality_report(persona: Persona, store=None) -> dict:
+    """人格档案质量评级 A/B/C/D——档案够不够格上场对话。
+
+     quality_checker：光"能跑"不算数，
+    得有量化门槛。指标都粗，但粗门槛比没门槛强：
+    - 风格层有没有学到东西（口头禅/句长/样本）
+    - 生活/关系/知识各层有没有内容
+    - 原话级证据占比（印象堆出来的人格不配叫人格）
+    - 有没有意向/设定（治理通道用上了吗）
+    """
+    s = persona.style
+    checks = {
+        "口头禅": bool(s.catchphrases),
+        "句长节奏": bool(s.avg_sentence_length),
+        "真实发言样本": len(s.sample_messages) >= 3,
+        "生活轮廓": bool(persona.life.interests or persona.life.occupation
+                         or persona.life.skills or persona.life.life_stage),
+        "关系网": len(persona.relations) >= 1,
+        "知识边界": len(persona.knowledge) >= 1,
+        "治理通道": bool(persona.identity_overrides or persona.style_directives
+                        or persona.corrections),
+    }
+    verbatim = store.verbatim_ratio() if store else 0.0
+    passed = sum(checks.values())
+    total = len(checks)
+    ratio = passed / total
+    if ratio >= 0.85 and verbatim >= 0.5:
+        grade = "A"
+    elif ratio >= 0.7:
+        grade = "B"
+    elif ratio >= 0.5:
+        grade = "C"
+    else:
+        grade = "D"
+    return {
+        "grade": grade,
+        "checks": checks,
+        "verbatim_ratio": round(verbatim, 2),
+        "missing": [k for k, v in checks.items() if not v],
+    }
 
 
 def epistemic_violations(persona: Persona, reply: str) -> list[str]:
@@ -94,8 +148,14 @@ def score_reply(persona: Persona, reply: str) -> EvalReport:
     if epi:
         score = min(score, 0.3)  # 认知错误一票否决式压分：像不像另说，先别胡说
 
+    stacked = hedge_stacking(reply)
+    if stacked:
+        score = max(0.0, score - 0.1)
+
     if epi:
         verdict = f"认知错误：TA 明说过不懂 {epi}，你却答得很自信"
+    elif stacked:
+        verdict = "叠甲了：一句里堆了三四个「大概/可能/应该」，没依据就直说没依据"
     elif violations:
         verdict = f"违规：出现 {violations}，本人明确不要这个"
     elif score >= 0.8:
@@ -112,5 +172,6 @@ def score_reply(persona: Persona, reply: str) -> EvalReport:
         directive_violations=violations,
         punctuation_fit=punctuation_fit,
         epistemic_violations=epi,
+        hedge_stacking=stacked,
         detail=verdict,
     )

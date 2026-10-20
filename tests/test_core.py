@@ -243,6 +243,72 @@ def test_conflicts_preserved_not_unified():
         assert "矛盾面" in prompt
 
 
+def test_evidence_dedup_and_gate_and_retract():
+    """
+    import tempfile
+    from sinian.core.evidence import ClaimStore
+
+    with tempfile.TemporaryDirectory() as td:
+        store = ClaimStore(Path(td) / "claims.json")
+        # 同一条证据反复出现不该把置信度刷上天
+        c = store.add("life.occupation", "设计", "self_statement", "我是做设计的")
+        after_first = c.confidence
+        store.add("life.occupation", "设计", "self_statement", "我是做设计的")
+        assert store.claims[0].confidence == after_first   # 重复证据不加持
+        store.add("life.occupation", "设计", "self_statement", "我做设计做了三年")
+        assert store.claims[0].confidence > after_first    # 新证据才加持
+
+        # 印象级门控：统计推断要压倒性置信度才生效
+        s2 = ClaimStore(Path(td) / "s2.json")
+        s2.add("life.occupation", "猜测职业", "statistical")
+        assert s2.resolve("life.occupation") is None       # 0.3 印象级，不够
+        s2.add("life.occupation", "猜测职业", "self_statement")  # 原话扶正
+        assert s2.resolve("life.occupation") == "猜测职业"
+
+        # 撤回：断言留在仓库，但不再生效
+        assert s2.retract("life.occupation", "猜测职业")
+        assert s2.resolve("life.occupation") is None
+        assert any(c.revoked for c in s2.claims)
+
+
+def test_rollback_fingerprint_tamper():
+    """ 的 payload_sha256：存档被改动就拒绝回滚。"""
+    import tempfile
+    from sinian.core.versions import PersonaVault
+    with tempfile.TemporaryDirectory() as td:
+        vault = PersonaVault(td)
+        p = Persona(name="薄荷")
+        p.save(vault.live_path)
+        v = vault.snapshot()
+        assert vault.verify(v)
+        # 有人偷偷改了存档
+        (vault.archive_dir / v).write_text('{"name": "被篡改"}', encoding="utf-8")
+        assert not vault.verify(v)
+        try:
+            vault.rollback(v)
+            raise AssertionError("被篡改的存档不该回滚成功")
+        except ValueError:
+            pass
+
+
+def test_hedge_stacking_and_quality_grade():
+    """ 的禁止叠甲 + 某开源项目 的质量门槛。"""
+    from sinian.core.evaluator import score_reply, hedge_stacking, quality_report
+    p = build_persona("薄荷", extract_windows(sample_messages()))
+    assert hedge_stacking("大概可能应该好像是这样吧")
+    assert not hedge_stacking("就是这样")
+    rep = score_reply(p, "大概可能应该，我也说不好")
+    assert rep.hedge_stacking
+    # 空档案评级应该是 D，补上内容能升上去
+    empty = Persona(name="空")
+    assert quality_report(empty)["grade"] == "D"
+    full = build_persona("薄荷", extract_windows(sample_messages()))
+    full.life.interests = ["科技数码"]
+    full.relations = [__import__("sinian.core.persona", fromlist=["SocialRelation"])
+                      .SocialRelation(name="阿茶", relation="朋友")]
+    assert quality_report(full)["grade"] in ("A", "B", "C")
+
+
 def test_epistemic_fidelity():
     """EER 认知错误率：本人明说过不会的领域，自信作答是重罪，认怂则豁免。"""
     from sinian.core.evaluator import score_reply, epistemic_violations

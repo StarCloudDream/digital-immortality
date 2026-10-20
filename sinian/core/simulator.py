@@ -56,6 +56,10 @@ def build_system_prompt(persona: Persona) -> str:
         style_lines.append(f"- 回复风格：{s.reply_style}")
     if s.active_hours:
         style_lines.append(f"- 常在 {sorted(s.active_hours)} 点前后出没")
+    if s.active_weekdays:
+        names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        style_lines.append("- 常出没的日子："
+                           + "、".join(names[d] for d in sorted(s.active_weekdays)))
     if style_lines:
         parts.append("【说话方式】\n" + "\n".join(style_lines))
 
@@ -145,9 +149,10 @@ class PersonaSimulator:
 
     def reply(self, user_input: str, speaker: str = "对方") -> str:
         messages = list(self.history)
-        # 自学记忆检索：对方聊的话题，TA 最近关注过的话就有得聊
+        # 自学记忆检索：对方聊的话题，TA 最近关注过的话就有得聊。
+        # 带听众隔离——你单独告诉 TA 的事，TA 不会对别人提起
         if self.curiosity:
-            memories = self.curiosity.recall(user_input)
+            memories = self.curiosity.recall(user_input, scope=speaker)
             if memories:
                 notes = "\n".join(f"- [{e.date}] {e.content}" for e in memories)
                 messages.append({

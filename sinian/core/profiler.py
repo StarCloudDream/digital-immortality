@@ -130,6 +130,7 @@ class StatisticalProfiler:
 
         lengths = [len(m.content) for m in self_msgs]
         hours = Counter(m.timestamp.hour for m in self_msgs)
+        weekdays = Counter(m.timestamp.weekday() for m in self_msgs)
         catchwords = Counter()
         for m in self_msgs:
             for w in self.CATCHWORD_POOL:
@@ -153,6 +154,7 @@ class StatisticalProfiler:
             avg_sentence_length=sum(lengths) / len(lengths),
             humor_score=self._humor_score(self_msgs),
             active_hours=[h for h, _ in hours.most_common(6)],
+            active_weekdays=[d for d, _ in weekdays.most_common(3)],
             reply_style=self._reply_style(windows),
             sample_messages=samples,
         )

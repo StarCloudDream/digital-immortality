@@ -82,6 +82,8 @@ class StyleLayer:
     avg_sentence_length: float | None = None
     humor_score: float | None = None      # 0-1，爱开玩笑的程度
     active_hours: list[int] = field(default_factory=list)  # 活跃时段
+    #: 活跃星期（0=周一）。GriefBot 的分析里星期分布是有区分度的特征
+    active_weekdays: list[int] = field(default_factory=list)
     reply_style: str | None = None        # 秒回/弧长/意念回复
     tone_keywords: list[str] = field(default_factory=list)  # 情绪基调关键词
     sample_messages: list[str] = field(default_factory=list)  # 代表性发言（few-shot 用）

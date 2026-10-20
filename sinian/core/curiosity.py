@@ -29,10 +29,16 @@ from sinian.core.persona import Persona
 class JournalEntry:
     """一条自学记录：TA 在离开之后了解到的新东西。"""
 
-    date: str                          # ISO 日期
+    date: str                          # 事情发生的日期
     domain: str                        # 归属的兴趣方向
     content: str                       # 学到的事（摘要）
     source: str = "self-learning"
+    #: 记下的日期（双时间戳：事件日和记录日不是一回事，
+    #: 同件事不同年代的说法分存，不以新盖旧）
+    written_at: str = ""
+    #: 听众隔离：这条记忆属于跟谁聊出来的。TA 不会对别人说
+    #: 你单独告诉 TA 的事（记忆隔离原则）
+    scope: str | None = None
 
 
 class CuriositySource(ABC):
@@ -81,16 +87,18 @@ class CuriosityEngine:
         vetoed = " ".join(self.persona.style_directives)
         return [d for d in dirs if d not in vetoed]
 
-    def learn(self, source: CuriositySource) -> list[JournalEntry]:
+    def learn(self, source: CuriositySource, scope: str | None = None) -> list[JournalEntry]:
         """从信息源挑出对口方向的内容，记入学习日志。返回新学的条目。"""
         dirs = self.directions()
         if not dirs:
             return []
+        # 本人明说过不会的领域，连学都不学——方向锁的另一半
+        disclaimed = {k.domain for k in self.persona.knowledge if k.level == "不会"}
         new_entries = []
         for item in source.fetch():
             topic = item.get("topic", "")
             content = item.get("content", "")
-            if not content:
+            if not content or topic in disclaimed:
                 continue
             matched = next((d for d in dirs
                             if d in topic or topic in d
@@ -101,6 +109,8 @@ class CuriosityEngine:
                     domain=matched,
                     content=content[:200],
                     source=source.name,
+                    written_at=date.today().isoformat(),
+                    scope=scope,
                 ))
         if new_entries:
             self._append(new_entries)
@@ -125,14 +135,23 @@ class CuriosityEngine:
     STOP_BIGRAMS = {"最近", "什么", "有没", "消息", "怎么", "为啥", "那个",
                     "一下", "知道", "觉得", "现在", "你们", "我们"}
 
-    def recall(self, query: str, limit: int = 5) -> list[JournalEntry]:
+    def recall(self, query: str, limit: int = 5,
+               scope: str | None = None) -> list[JournalEntry]:
         """按对话内容检索相关自学记忆：对方聊什么，TA 想起什么。
 
-        用 2 字滑窗做粗匹配——"芯片"从"最近芯片有什么新消息"里抠出来，
-        命中日志里"新芯片发布"就算相关。比关键词表灵活，比 embedding 便宜。
+        顺序很重要：**先筛资格，再匹配，最后截断**（
+        "Eligibility precedes matching, ranking, and limit"）。
+        不合格的记忆再匹配也不能靠词频挤进结果。
+        - 本人不会的领域：不召回
+        - 听众隔离：别人聊出来的记忆，不对当前这个人提起
         """
+        disclaimed = {k.domain for k in self.persona.knowledge if k.level == "不会"}
         hits = []
         for e in self.load_journal():
+            if e.domain in disclaimed:
+                continue
+            if e.scope is not None and scope is not None and e.scope != scope:
+                continue
             haystack = e.domain + " " + e.content
             matched = any(
                 bg in haystack
