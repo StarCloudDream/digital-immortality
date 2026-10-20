@@ -113,13 +113,35 @@ class LifeProfiler:
                 skills.append(hit.group(1))
         return list(dict.fromkeys(skills))[:8]
 
+    def _disclaimed_in(self, text: str) -> dict[str, set[str]]:
+        """从"我不懂/不会 X"里抠出被划界的兴趣领域。
+
+        返回 {领域: {被点名的关键词}}，例如 "我不懂炒股" → {"理财": {"炒股"}}。
+        后面 _extract_interests 拿到它，只把被点名的领域在该条消息里按住，
+        不连坐整条消息里别的方向。
+        """
+        out: dict[str, set[str]] = {}
+        for hit in re.finditer(r"不(?:太|大)?[懂会]\s*([一-鿿A-Za-z]{1,8})", text):
+            word = hit.group(1)
+            for domain, keywords in self.INTEREST_DOMAINS.items():
+                if word in keywords or any(word in k for k in keywords):
+                    out.setdefault(domain, set()).add(word)
+        return out
+
     def _extract_interests(self, self_msgs: list[UnifiedMessage]) -> list[str]:
         counts: Counter = Counter()
         for m in self_msgs:
-            # 免责声明（"我是真的不懂炒股"）里的词不算兴趣，人是在划界不是在聊爱好
-            if re.search(r"不(?:太|大)?[懂会]", m.content):
-                continue
+            # 免责声明只按住被点名的领域，别把整条消息的兴趣一起埋了——
+            # "不懂理财但爱看美食"应该只丢掉理财，美食照常算。
+            # 不过要是同一条消息里这领域还有别的正向关键词（"不会做饭但爱探店"），
+            # 说明只是随口划界，不算真免责。
+            disclaimed = self._disclaimed_in(m.content)
             for domain, keywords in self.INTEREST_DOMAINS.items():
+                if domain in disclaimed:
+                    others = [k for k in keywords
+                              if k not in disclaimed[domain] and k in m.content]
+                    if not others:
+                        continue
                 if any(k in m.content for k in keywords):
                     counts[domain] += 1
         return [d for d, _ in counts.most_common(6)]
@@ -156,6 +178,9 @@ class LifeProfiler:
 
     # ---------- 知识边界 ----------
 
+    #: 掌握度排序：不会 < 了解 < 擅长。只允许升级，唯独"不会"可一键压顶。
+    _KNOWLEDGE_RANK = {"不会": 0, "了解": 1, "擅长": 2}
+
     def _extract_knowledge(self, self_msgs: list[UnifiedMessage]) -> list[KnowledgeDomain]:
         """本人亲口说的"不会/不懂/擅长"，是知识边界的直接证据。
 
@@ -170,9 +195,14 @@ class LifeProfiler:
                 return
             if domain not in domains:
                 domains[domain] = KnowledgeDomain(domain=domain, level=level)
-            # "不会"的自述优先级最高，一旦出现不被后来的"了解"覆盖
-            if level == "不会" or domains[domain].level != "不会":
-                domains[domain].level = level
+            else:
+                cur = domains[domain]
+                # 本人直接说"不会"优先级最高，一旦说了后面谁也别想翻案；
+                # 否则只允许升级——"擅长"不该被后来的"了解"降级。
+                if (level == "不会"
+                        or self._KNOWLEDGE_RANK.get(level, 1)
+                        > self._KNOWLEDGE_RANK.get(cur.level, 1)):
+                    cur.level = level
             if len(domains[domain].evidence) < 3:
                 domains[domain].evidence.append(evidence[:50])
 
@@ -181,10 +211,15 @@ class LifeProfiler:
                 add(hit.group(1), "不会", m.content)
             for hit in re.finditer(r"我(?:很|特别|超|最)?擅长\s*(.{1,10}?)(?=[，。但可！~、]|$)", m.content):
                 add(hit.group(1), "擅长", m.content)
-            # 兴趣领域里高频出没的，算"了解"
+        # 兴趣领域里高频出没的，算"了解"——但本人明确划界的领域不算。
+        # 说了不懂炒股，理财就别被自动标成"了解"，否则一边不会一边了解很拧巴。
+        disclaimed: set[str] = set()
+        for m in self_msgs:
+            disclaimed |= set(self._disclaimed_in(m.content).keys())
         interest_domains = self._extract_interests(self_msgs)
         for d in interest_domains:
-            if d not in domains:
-                domains[d] = KnowledgeDomain(domain=d, level="了解")
+            if d in disclaimed or d in domains:
+                continue
+            domains[d] = KnowledgeDomain(domain=d, level="了解")
 
         return list(domains.values())

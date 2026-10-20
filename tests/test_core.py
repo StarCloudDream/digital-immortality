@@ -117,6 +117,43 @@ def test_life_profiler_relations_and_knowledge():
     assert life.occupation or "排版" in life.skills
 
 
+def test_interest_disclaimer_only_suppresses_named_domain():
+    """免责声明只按住被点名的领域，不埋整条消息的兴趣。
+
+    "不懂理财但爱看美食视频" —— 理财丢掉，美食照常算。
+    """
+    from sinian.core.life import LifeProfiler
+    msgs = [make_msg("我是真的不懂理财，但超爱探店吃火锅", True, 0)]
+    life, _, _ = LifeProfiler().profile(msgs, "薄荷")
+    assert "美食" in life.interests
+    assert "理财" not in life.interests
+
+
+def test_knowledge_respects_disclaimer():
+    """本人说了不懂炒股，理财不该被自动标成"了解"。"""
+    from sinian.core.life import LifeProfiler
+    msgs = [
+        make_msg("我是真的不懂炒股", True, 0),
+        make_msg("最近理财话题好火啊", True, 1),
+    ]
+    _, _, knowledge = LifeProfiler().profile(msgs, "薄荷")
+    know_map = {k.domain: k.level for k in knowledge}
+    assert know_map.get("炒股") == "不会"
+    assert not any(k.domain == "理财" and k.level == "了解" for k in knowledge)
+
+
+def test_directions_veto_only_negative_directives():
+    """只有否定意向才否决方向；正面积向（"TA最爱聊理财"）不该砍方向。"""
+    from sinian.core.curiosity import CuriosityEngine
+    p = Persona(name="薄荷")
+    p.life.interests = ["理财", "科技数码"]
+    p.style_directives = ["TA最爱聊理财"]        # 正面积向，不应否决
+    assert set(CuriosityEngine(p, "/tmp/j.jsonl").directions()) == {"理财", "科技数码"}
+
+    p.style_directives = ["别聊理财"]             # 否定意向，才否决理财
+    assert CuriosityEngine(p, "/tmp/j.jsonl").directions() == ["科技数码"]
+
+
 def test_age_accumulates():
     from datetime import date
     p = Persona(name="薄荷", profiled_at="2026-10-20", age_anchor=25)

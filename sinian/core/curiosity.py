@@ -83,8 +83,16 @@ class CuriosityEngine:
         for k in self.persona.knowledge:
             if k.level in ("擅长", "了解") and k.domain not in dirs:
                 dirs.append(k.domain)
-        # 意向否定过滤："别碰理财"这类意向在这里同样生效
-        vetoed = " ".join(self.persona.style_directives)
+        # 只有带否定意味的意向才当否决用——"TA最爱聊理财"这种正面积向不该砍方向。
+        # 而且按领域名精确匹配，别用子串误伤（"金融"恰好出现在某条 directive 里就把理财杀了）
+        NEG_MARKERS = ("别", "不要", "不碰", "不聊", "别让", "禁止",
+                       "少聊", "少碰", "不学", "别学")
+        vetoed: set[str] = set()
+        for directive in self.persona.style_directives:
+            if any(marker in directive for marker in NEG_MARKERS):
+                for d in dirs:
+                    if d in directive:
+                        vetoed.add(d)
         return [d for d in dirs if d not in vetoed]
 
     def learn(self, source: CuriositySource, scope: str | None = None) -> list[JournalEntry]:
